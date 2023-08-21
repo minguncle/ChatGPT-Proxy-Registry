@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executors Dashboard</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <style>
+        .small-spacing {
+            margin-bottom: 0.25rem !important;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-5">
+    <h1>OpenAI-API执行器列表</h1>
+    <table class="table" id="executorsTable">
+        <thead>
+        <tr>
+            <th scope="col">执行器名称</th>
+            <th scope="col">执行器地址</th>
+            <th scope="col">操作</th>
+        </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" id="details">
+        </div>
+    </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+<script>
+    const baseurl = 'http://127.0.0.1:80';
+
+    document.addEventListener('DOMContentLoaded', fetchExecutors);
+    let currentExecutorName = null; // 当前查看详情的执行器名称
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchExecutors();
+        setInterval(fetchExecutors, 2000); // 每2秒轮询一次刷新数据
+    });
+
+    function fetchExecutors() {
+        return fetch(baseurl + '/getExecutors')
+            .then(response => response.json())
+            .then(data => {
+                data.sort()
+                const tbody = document.querySelector('#executorsTable tbody');
+                tbody.innerHTML = '';
+                data.forEach(executor => {
+                    const row = tbody.insertRow();
+                    row.insertCell().textContent = executor.sys_status.executor_name;
+                    row.insertCell().textContent = executor.sys_status.executor_addr;
+                    const detailsCell = row.insertCell();
+                    const detailsButton = document.createElement('button');
+                    detailsButton.textContent = '查看详情';
+                    detailsButton.className = 'btn btn-primary';
+                    detailsButton.onclick = () => showDetails(executor);
+                    detailsCell.appendChild(detailsButton);
+                });
+                return data
+            });
+    }
+
+    function showDetails(executor) {
+        currentExecutorName = executor.sys_status.executor_name;
+        const detailsDiv = document.querySelector('#details');
+        detailsDiv.innerHTML = `
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailsModalLabel">Details: ${executor.sys_status.executor_name}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    ${executor.api_status.map(keyStatus => `
+                        <div class="card mb-3" xmlns="http://www.w3.org/1999/html">
+                            <div class="card-header">Key: ${keyStatus.key}</div>
+                            <div class="card-body">
+                                <p class="small-spacing">Status: <span class="badge badge-${keyStatus.ban_status ? 'danger' : 'success'}">${keyStatus.ban_status ? '禁用' : '启用'}</span></p>
+                                <p class="small-spacing">Usage: ${keyStatus.usage}</p>
+                                <p class="small-spacing">Limit: ${keyStatus.limit}</p>
+                                <p class="small-spacing">Remark: ${keyStatus.remark}</p>
+                                <p class="small-spacing">Type Status:</p>
+                                <ul class="small-spacing">
+                                    ${keyStatus.type_status.map(typeStatus => `<li>${typeStatus.type}: <span class="badge badge-${typeStatus.status === 'active' ? 'success' : 'warning'}">${typeStatus.status}</span></li>`).join('')}
+                                </ul>
+                                </br>
+                                <button class="btn btn-danger" onclick="toggleAPIKey('${executor.sys_status.executor_name}','${keyStatus.key}', 'disable')">禁用</button>
+                                <button class="btn btn-success" onclick="toggleAPIKey('${executor.sys_status.executor_name}','${keyStatus.key}', 'enable')">启用</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            `;
+        $('#detailsModal').modal('show');
+    }
+
+    function toggleAPIKey(executorName, key, status) {
+        fetch(`${baseurl}/toggleAPIKey?key=${key}&executorName=${executorName}&status=${status}`)
+            .then(() => {
+                fetchExecutors().then(data => {
+                    if (currentExecutorName) {
+                        // 从新获取的执行器列表中找到当前查看的执行器，并更新模态窗口的内容
+                        const executor = data.find(e => e.sys_status.executor_name === currentExecutorName);
+                        if (executor) {
+                            showDetails(executor);
+                        }
+                    }
+                });
+            });
+    }
+
+
+</script>
+</body>
+</html>
